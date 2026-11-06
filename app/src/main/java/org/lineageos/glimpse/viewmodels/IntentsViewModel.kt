@@ -181,7 +181,19 @@ class IntentsViewModel(application: Application) : GlimpseViewModel(application)
                 }
             }
 
-            when (intent.action) {
+            // MiCamera asks for Xiaomi's gallery first, then falls back to a plain view of its
+            // last shot. The extra is false unless the phone is locked, so a review shows the
+            // whole album and the locked case stays on the one photo.
+            val action = when {
+                intent.action == Intent.ACTION_VIEW &&
+                        intent.hasExtra(EXTRA_START_WHEN_LOCKED) &&
+                        !intent.getBooleanExtra(EXTRA_START_WHEN_LOCKED, true) ->
+                    MediaStore.ACTION_REVIEW
+
+                else -> intent.action
+            }
+
+            when (action) {
                 null,
                 Intent.ACTION_MAIN -> ParsedIntent.MainIntent()
 
@@ -563,6 +575,7 @@ class IntentsViewModel(application: Application) : GlimpseViewModel(application)
     }
 
     companion object {
+        private const val EXTRA_START_WHEN_LOCKED = "StartActivityWhenLocked"
         private val LOG_TAG = IntentsViewModel::class.simpleName!!
 
         private val LOCAL_SCHEMES = setOf(
