@@ -535,7 +535,7 @@ class ViewActivity : AppCompatActivity(R.layout.activity_view) {
             if (media.uri != lastVideoUriPlayed) {
                 saveCurrentVideoPosition()
                 lastVideoUriPlayed = media.uri
-                viewModel.setCurrentVideoUri(media.uri)
+                viewModel.setCurrentVideoUri(media.uri, media.displayName)
             }
         } else {
             saveCurrentVideoPosition()

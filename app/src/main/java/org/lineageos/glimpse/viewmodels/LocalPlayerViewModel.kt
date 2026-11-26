@@ -12,6 +12,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
+import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
@@ -364,13 +365,14 @@ class LocalPlayerViewModel(
         _fullscreenMode.value = _fullscreenMode.value.not()
     }
 
-    fun setCurrentVideoUri(uri: Uri) {
+    fun setCurrentVideoUri(uri: Uri, displayName: String? = null) {
         val startPositionMs = when (sharedPreferences.rememberVideoPlaybackPositionEnabled) {
             true -> sharedPreferences.getVideoPlaybackPosition(uri)
             false -> 0L
         }
 
         exoPlayer.apply {
+            setSlowMotion(slowMotionCaptureFps(displayName))
             setMediaItem(MediaItem.fromUri(uri))
             prepare()
             if (startPositionMs > 0L) {
@@ -412,6 +414,7 @@ class LocalPlayerViewModel(
             .createMediaSource(MediaItem.fromUri("motion-photo://video"))
 
         exoPlayer.apply {
+            setSlowMotion(null)
             setMediaSource(mediaSource)
             prepare()
             motionPhoto.metadata.presentationTimestampUs?.let {
@@ -419,6 +422,25 @@ class LocalPlayerViewModel(
             }
             playWhenReady = true
         }
+    }
+
+    /**
+     * Play a slow motion clip slowly, or a normal one at normal speed.
+     *
+     * MiCamera saves slow motion as high frame rate video in real time
+     * (VID_..._HSR_240.mp4) and leaves slowing it down to Xiaomi's gallery. Play it so its
+     * frames come at [SLOW_MOTION_PLAYBACK_FPS], without sound: its audio is real time.
+     *
+     * @param captureFps The clip's capture frame rate, null for a normal clip
+     */
+    private fun ExoPlayer.setSlowMotion(captureFps: Int?) {
+        val slowMotion = captureFps != null
+        playbackParameters = PlaybackParameters(
+            captureFps?.let { SLOW_MOTION_PLAYBACK_FPS / it } ?: 1f
+        )
+        trackSelectionParameters = trackSelectionParameters.buildUpon()
+            .setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, slowMotion)
+            .build()
     }
 
     /**
@@ -446,5 +468,23 @@ class LocalPlayerViewModel(
         private const val MEDIA_POSITION_KEY = "media_position"
 
         private const val FINISHED_VIDEO_POSITION_TOLERANCE_MS = 2_000L
+
+        /**
+         * Frame rate slow motion clips are played at: 240 fps plays 8 times slower.
+         */
+        private const val SLOW_MOTION_PLAYBACK_FPS = 30f
+
+        /**
+         * MiCamera's high speed recording file name: VID_<date>_<time>_HSR_<fps>.mp4.
+         */
+        private val HSR_FILE_NAME = Regex("""_HSR_(\d+)\.""")
+
+        /**
+         * @return The capture frame rate of a slow motion clip, null for any other file
+         */
+        fun slowMotionCaptureFps(displayName: String?) = displayName
+            ?.let { HSR_FILE_NAME.find(it) }
+            ?.groupValues?.get(1)?.toIntOrNull()
+            ?.takeIf { it > SLOW_MOTION_PLAYBACK_FPS }
     }
 }
